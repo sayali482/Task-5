@@ -1,0 +1,97 @@
+import tkinter as tk
+from tkinter import messagebox, scrolledtext
+import ast
+import re
+
+class CodeReviewer(ast.NodeVisitor):
+    def __init__(self, code):
+        self.code = code
+        self.tree = None
+        try:
+            self.tree = ast.parse(code)
+        except Exception as e:
+            self.comments = [f"❌ Syntax Error: {e}"]
+            return
+        self.unused_vars = set()
+        self.used_vars = set()
+        self.defined_vars = set()
+        self.comments = []
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Store):
+            self.defined_vars.add(node.id)
+        elif isinstance(node.ctx, ast.Load):
+            self.used_vars.add(node.id)
+        self.generic_visit(node)
+
+    def check_unused_variables(self):
+        self.unused_vars = self.defined_vars - self.used_vars
+        for var in self.unused_vars:
+            self.comments.append(f"⚠️ Unused variable detected: '{var}'")
+
+    def check_style_issues(self):
+        # Check for double quotes vs single quotes
+        double_quotes = re.findall(r'".*"', self.code)
+        if double_quotes:
+            self.comments.append("💡 Style suggestion: Use single quotes consistently instead of double quotes.")
+
+        # Check indentation consistency (PEP8 = 4 spaces)
+        lines = self.code.split("\n")
+        for i, line in enumerate(lines, start=1):
+            if line.startswith(" ") and (len(line) - len(line.lstrip())) % 4 != 0:
+                self.comments.append(f"⚠️ Indentation issue at line {i}. Use multiples of 4 spaces.")
+
+    def review(self):
+        if not self.tree:
+            return self.comments
+        self.visit(self.tree)
+        self.check_unused_variables()
+        self.check_style_issues()
+        return self.comments
+
+
+# Tkinter GUI
+def review_code():
+    code = text_area.get("1.0", tk.END).strip()
+    if not code:
+        messagebox.showwarning("Input Error", "Please paste some Python code to review.")
+        return
+
+    reviewer = CodeReviewer(code)
+    feedback = reviewer.review()
+
+    result_area.config(state="normal")
+    result_area.delete("1.0", tk.END)
+    if feedback:
+        for comment in feedback:
+            result_area.insert(tk.END, comment + "\n")
+    else:
+        result_area.insert(tk.END, "✅ No issues found. Code looks clean!\n")
+    result_area.config(state="disabled")
+
+def approve_code():
+    messagebox.showinfo("Approval", "✅ Code Approved!")
+
+
+# Main Window
+root = tk.Tk()
+root.title("AI-Driven Code Reviewer")
+root.geometry("700x600")
+
+# Input Area
+tk.Label(root, text="Paste your Python code below:", font=("Arial", 12, "bold")).pack(pady=5)
+text_area = scrolledtext.ScrolledText(root, width=80, height=15, font=("Courier New", 10))
+text_area.pack(pady=5)
+
+# Buttons
+btn_frame = tk.Frame(root)
+btn_frame.pack(pady=5)
+tk.Button(btn_frame, text="Review Code", command=review_code, bg="lightblue", width=15).grid(row=0, column=0, padx=5)
+tk.Button(btn_frame, text="Approve", command=approve_code, bg="lightgreen", width=15).grid(row=0, column=1, padx=5)
+
+# Output Area
+tk.Label(root, text="Review Suggestions:", font=("Arial", 12, "bold")).pack(pady=5)
+result_area = scrolledtext.ScrolledText(root, width=80, height=10, font=("Courier New", 10), state="disabled")
+result_area.pack(pady=5)
+
+root.mainloop()
